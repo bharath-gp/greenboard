@@ -1,6 +1,6 @@
 angular.module('svc.data', [])
     .value("DEFAULT_FILTER_BY", 2000)
-    .value("DEFAULT_BUILDS_FILTER_BY", 5)
+    .value("DEFAULT_BUILDS_FILTER_BY", 10)
     .service('Data', ['$location', 'DEFAULT_FILTER_BY', 'DEFAULT_BUILDS_FILTER_BY',
         function ($location, DEFAULT_FILTER_BY, DEFAULT_BUILDS_FILTER_BY){
 
@@ -18,6 +18,8 @@ angular.module('svc.data', [])
             _buildsFilterBy = DEFAULT_BUILDS_FILTER_BY
             _initUrlParams = null
             _buildInfo = {}
+            _jobsPage = 0;
+            _jobsPerPage = 20;
 
             function updateLocationUrl(type, key, disabled){
                 var typeArgs = $location.search()[type]
@@ -27,7 +29,7 @@ angular.module('svc.data', [])
                     } else if(typeArgs.indexOf(key) == -1) {
                         typeArgs+=","+key
                     }
-                    if(!_.any(_.pluck(_sideBarItems[type], "disabled"))){
+                    if(!_.some(_.map(_sideBarItems[type], "disabled"))){
                         // all items are selected now
                         typeArgs = null
                     }
@@ -62,6 +64,7 @@ angular.module('svc.data', [])
             function disableItem(key, type){
 
                 var jobtype = type == "platforms" ? "os" : "component"
+                jobtype = type == "serverVersions" ? "server_version" : jobtype
 
                 // diabling item: remove from active list of build jobs
                 _buildJobsActive = _.reject(_buildJobsActive, function(job){
@@ -74,6 +77,7 @@ angular.module('svc.data', [])
             function enableItem(key, type){
 
                 var jobtype = type == "platforms" ? "os" : "component"
+                jobtype = type == "serverVersions" ? "server_version" : jobtype
 
                 // enabling item so include in active list of build jobs
                 var includeJobs = _.filter(_buildJobs, function(job){
@@ -84,8 +88,8 @@ angular.module('svc.data', [])
                         // get alternate of current type..
                         // ie... so if we are adding back an os key
                         // then get the component listed for this job
-                        var altTypes = jobtype == "os" ? ["features", "component"] : ["platforms", "os"]
-                        var sideBarItem = _.find(_sideBarItems[altTypes[0]],"key", job[altTypes[1]])
+                        var altTypes = jobtype == "os" ? ["features", "component", "serverVersions"] : ["platforms", "os", "server_version"]
+                        var sideBarItem = _.find(_sideBarItems[altTypes[0]], {"key":job[altTypes[1]]})
 
                         // only include this job if it's alternate type isn't disabled
                         // ie.. do not add back goxdcr if os is centos and centos is disabled
@@ -199,12 +203,12 @@ angular.module('svc.data', [])
 
                         // if this is first item to be disabled within os/component
                         // then inverse toggling is performed
-                        var isAnyOfThisTypeDisabled = _.any(_.pluck(_sideBarItems[type], "disabled"))
+                        var isAnyOfThisTypeDisabled = _.some(_.map(_sideBarItems[type], "disabled"))
                         if(!isAnyOfThisTypeDisabled){
 
                             // very well then, inverse toggling it is
                             // disable every item but this one
-                            var siblingItems = _.pluck(_sideBarItems[type], "key")
+                            var siblingItems = _.map(_sideBarItems[type], "key")
                             siblingItems.forEach(function(k){
                                 if(k!=key){
                                     disableItem(k, type)
@@ -247,7 +251,7 @@ angular.module('svc.data', [])
                         // only enable urlParams
                         _.mapKeys(_initUrlParams, function(values, type){
 
-                            if(["platforms", "features"].indexOf(type) != -1){
+                            if(["platforms", "features", "serverVersions"].indexOf(type) != -1){
                                 var keys = values.split(",")
                                 keys.forEach(function(k){
                                     enableItem(k, type)
@@ -269,30 +273,50 @@ angular.module('svc.data', [])
 
                     // filter out just jobs with this key
                     var jobtype = type == "platforms" ? "os" : "component"
+                    jobtype = type == "serverVersions" ? "server_version" : jobtype
                     var subset = _buildJobsActive
                     if (type != "build"){
                         subset = _.filter(_buildJobsActive, function(job){
                             return job[jobtype] == key
                         })
                     }
+		    subset = _.reject(subset, "olderBuild", true)
+                    subset = _.reject(subset, "deleted", true)
+                    subset = _.uniqBy(subset, "name")
 
                     // calculate absolute stats
-                    var absTotal = _.sum(_.pluck(subset, "totalCount"))
-                    var absFail = _.sum(_.pluck(subset, "failCount"))
-                    var absPending = _.sum(_.pluck(subset, "pending"))
+                    var absTotal = _.sum(_.map(_.uniq(subset), "totalCount"))
+                    var absFail = _.sum(_.map(_.uniq(subset), "failCount"))
+                    var absPending = _.sum(_.map(_.uniq(subset), "pending"))
+                    var absSkip = _.sum(_.map(_.uniq(subset), "skipCount"))
+                    if (!absTotal){
+                        absTotal = 0;
+                    }
+                    if (!absFail){
+                        absFail = 0;
+                    }
+                    if (!absPending){
+                        absPending = 0;
+                    }
+                    if (!absSkip){
+                        absSkip = 0;
+                    }
                     var absStats = {
-                        passed: absTotal-absFail,
+                        passed: absTotal-absFail-absSkip,
                         failed: absFail,
-                        pending: absPending
+                        pending: absPending,
+                        skipped: absSkip,
+                        total: absTotal+absPending
                     }
 
                     // calculate percentage based stats
-                    var passedPerc = getPercOfVal(absStats, absStats.passed)
+                    var passedPerc = getPercOfVal(absStats, absStats.passed, false)
                     var percStats = {
                         run: getItemPercStr(absStats),
                         passed: wrapPercStr(passedPerc),
-                        failed: getPercOfValStr(absStats, absStats.failed),
-                        pending: getPercOfValStr(absStats, absStats.pending),
+                        failed: getPercOfValStr(absStats, absStats.failed, false),
+                        pending: getPercOfValStr(absStats, absStats.pending, true),
+                        skipped: getPercOfValStr(absStats, absStats.skipped, true),
                         passedRaw: passedPerc
                     }
 
@@ -345,6 +369,18 @@ angular.module('svc.data', [])
                         params["target"] = _target
                         _initUrlParams = params
                     }
+                },
+                setJobsPerPage: function(jobsPerPage) {
+                    _jobsPerPage = jobsPerPage;
+                },
+                setJobsPage: function(jobsPage) {
+                    _jobsPage = jobsPage;
+                },
+                getJobsPerPage: function() {
+                    return _jobsPerPage;
+                },
+                getJobsPage: function() {
+                    return _jobsPage;
                 }
             }
 
@@ -353,18 +389,21 @@ angular.module('svc.data', [])
 
 
 // data helper methods
-function getPercOfVal(stats, val){
+function getPercOfVal(stats, val, includeSkipped){
     if (!stats){
         return 0;
     }
 
     var denom = stats.passed + stats.failed;
+    if (includeSkipped) {
+        denom += stats.skipped
+    }
     if(denom == 0){ return 0; }
-    return Math.floor(100*((val/denom).toFixed(2)));
+    return (100*(val/denom)).toFixed(1);
 }
 
-function getPercOfValStr(stats, val){
-    return wrapPercStr(getPercOfVal(stats, val))
+function getPercOfValStr(stats, val, includeSkipped){
+    return wrapPercStr(getPercOfVal(stats, val, includeSkipped))
 }
 
 function getItemPerc(stats){
@@ -372,11 +411,11 @@ function getItemPerc(stats){
         return 0;
     }
 
-    var total = stats.passed + stats.failed;
+    var total = stats.passed + stats.failed + stats.skipped;
     var denom = total + stats.pending;
     if(denom == 0){ return 0; }
 
-    return Math.floor(100*((total/denom).toFixed(2)));
+    return (100*(total/denom)).toFixed(1);
 }
 
 function getItemPercStr(stats){

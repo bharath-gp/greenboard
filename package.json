@@ -1,6 +1,6 @@
 {
   "name": "greenboard",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "qe dashboard",
   "main": "index.js",
   "scripts": {
@@ -18,16 +18,20 @@
   },
   "homepage": "https://github.com/couchbaselabs/greenboard#readme",
   "dependencies": {
-    "body-parser": "^1.14.2",
-    "couchbase": "git+https://github.com/couchbase/couchnode.git#master",
-    "express": "^4.13.3",
-    "gulp": "^3.9.0",
-    "json-middleware": "^1.0.2",
-    "lodash": "^3.10.1",
-    "promise": "^7.0.4"
+    "angular-ui-bootstrap": "latest",
+    "body-parser": "latest",
+    "couchbase": "^3.1.3",
+    "cron": "latest",
+    "express": "latest",
+    "graceful-fs": "latest",
+    "gulp": "latest",
+    "jenkins": "latest",
+    "json-middleware": "latest",
+    "lodash": "latest",
+    "promise": "latest"
   },
   "devDependencies": {
-    "gulp-express": "^0.3.5",
-    "gulp-live-server": "0.0.29"
+    "gulp-express": "latest",
+    "gulp-live-server": "latest"
   }
 }

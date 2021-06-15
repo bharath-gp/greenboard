@@ -32,8 +32,8 @@ angular.module('app.target', [])
             }
         }])
 
-    .directive('filterSelector', ['Data',
-        function (Data) {
+    .directive('filterSelector', ['Data', 'QueryService',
+        function (Data, QueryService) {
             return {
                 restrict: 'E',
                 scope: {
@@ -46,22 +46,23 @@ angular.module('app.target', [])
                     scope.passFilters = [0, 2000, 5000]
 
                     scope.changeFilter = function (f) {
-                        scope.activeFilter = f
-                        Data.setBuildFilter(scope.activeFilter)
-                    }
-
-                    scope.$watch(function () {
-                            return Data.getBuildFilter()
-                        },
-                        function (filterBy) {
-                            scope.activeFilter = filterBy
+			            var target = Data.getCurrentTarget()
+                        var version = Data.getSelectedVersion()
+                        var buildsFilter = Data.getBuildsFilter()
+                        var testsFilter = f
+                        QueryService.getBuilds(target, version, testsFilter, buildsFilter).then(function(builds){
+                            Data.setVersionBuilds(builds)
+                            Data.setBuildFilter(scope.activeFilter)
+                            return Data.getVersionBuilds()
                         })
+                        scope.activeFilter = f
+                    }
 
                 }
             }
         }])
-    .directive('buildsFilterSelector', ['Data',
-        function (Data) {
+    .directive('buildsFilterSelector', ['Data', 'QueryService',
+        function (Data, QueryService) {
             return {
                 restrict: 'E',
                 scope: {
@@ -74,16 +75,30 @@ angular.module('app.target', [])
                     scope.buildsFilters = [5, 10, 25, 100]
 
                     scope.changeBuildsFilter = function (f) {
+			            var target = Data.getCurrentTarget()
+                        var version = Data.getSelectedVersion()
+                        var testsFilter = Data.getBuildFilter()
+
+                        var buildsFilter = f
+                        var retry = 3
+                        var get = function(){QueryService.getBuilds(target, version, testsFilter, buildsFilter).then(function(builds){
+                            Data.setVersionBuilds(builds)
+                            // if(builds.length != buildsFilter && retry!=0){
+                            //     Data.setBuildsFilter(0)
+                            //     setTimeout(function(){get()},3000)
+                            //     retry = retry - 1
+                            // }
+                            // else{
+                            Data.setBuildsFilter(scope.activeBuildFilter)
+                            // }
+                            return Data.getVersionBuilds()
+                            
+                        })}
+                        get();
+                        // Data.setBuildsFilter(scope.activeBuildFilter)
                         scope.activeBuildFilter = f
-                        Data.setBuildFilter(scope.activeBuildFilter)
                     }
 
-                    scope.$watch(function () {
-                            return Data.getBuildsFilter()
-                        },
-                        function (buildsFilter) {
-                            scope.activeBuildFilter = buildsFilter
-                        })
                 }
             }
         }])
@@ -155,50 +170,64 @@ angular.module('app.target', [])
         }])
 
 
-    .factory('ViewTargets', ['COUCHBASE_TARGET', 'SDK_TARGET', 'MOBILE_TARGET',
-        function (COUCHBASE_TARGET, SDK_TARGET, MOBILE_TARGET) {
+    .factory('ViewTargets', ['COUCHBASE_TARGET', 'SDK_TARGET', 'SG_TARGET', 'CBLITE_TARGET', 'CBO_TARGET',
+  	function (COUCHBASE_TARGET, SDK_TARGET, SG_TARGET, CBLITE_TARGET, CBO_TARGET){
 
-            var viewTargets = [COUCHBASE_TARGET, SDK_TARGET, MOBILE_TARGET]
-            var targetMap = {} // reverse lookup map
+      var viewTargets = [COUCHBASE_TARGET, SDK_TARGET, SG_TARGET, CBLITE_TARGET, CBO_TARGET]
+      var targetMap = {} // reverse lookup map
 
-            // allow reverse lookup by bucket
-            viewTargets = viewTargets.map(function (t, i) {
-                t['i'] = i
-                targetMap[t.bucket] = t
-                return t
-            })
+      // allow reverse lookup by bucket
+      viewTargets = viewTargets.map(function(t, i){
+        t['i'] = i
+        targetMap[t.bucket] = t
+        return t
+      })
 
-            return {
-                allTargets: function () {
-                    return viewTargets
-                },
-                getTarget: function (target) {
-                    return targetMap[target]
-                }
+      return {
+            allTargets: function(){
+            	return viewTargets
+            },
+            getTarget: function(target){
+            	return targetMap[target]
             }
-        }])
+        }
+  }])
 
 
-    .value('COUCHBASE_TARGET', {
+ .value('COUCHBASE_TARGET', {
         "title": "Couchbase Server",
         "bucket": "server",
         "key": "abspassed",
         "value": 100,
         "options": [0, 50, 100, 500]
-    })
-    .value('SDK_TARGET', {
+  })
+ .value('SDK_TARGET', {
         "title": "SDK",
         "bucket": "sdk",
         "key": "abspassed",
         "value": 100,
         "options": [0, 50, 100, 500]
-    })
-    .value('MOBILE_TARGET', {
-        "title": "Mobile",
-        "bucket": "mobile",
+  })
+  .value('SG_TARGET', {
+        "title": "Sync Gateway",
+        "bucket": "sync_gateway",
         "key": "abspassed",
         "value": 0,
         "options": [0, 50, 100, 500]
-    })
+  })
+  .value('CBLITE_TARGET', {
+        "title": "Couchbase Lite",
+        "bucket": "cblite",
+        "key": "abspassed",
+        "value": 0,
+        "options": [0, 50, 100, 500]
+  })
+  .value('CBO_TARGET', {
+         "title": "Couchbase Operator",
+         "bucket": "operator",
+         "key": "abspassed",
+         "value": 0,
+         "options": [0, 50, 100, 500]
+  });
 
 

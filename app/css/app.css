@@ -34,9 +34,7 @@ body {
  */
 
 /* Hide for mobile, show later */
-.sidebar {
-  display: none;
-}
+
 @media (min-width: 768px) {
   .sidebar {
     position: fixed;
@@ -417,4 +415,71 @@ body {
 
 .margin-left{
   margin-left: -30px;
+}
+.graph-padding {
+  padding: 10px;
+}
+
+.claim-summary {
+  max-height: 200px;
+  overflow-y: scroll;
+}
+
+.claim-count {
+  display: inline;
+  margin-right: 10px;
+  font-weight: bold;
+}
+
+.component-analytics {
+  margin-left: 10px;
+  color: #c88317;
+}
+
+input#search {
+  width: 30%;
+}
+
+.show-full-claim {
+  margin-right: 10px;
+}
+
+#pagination, #jobs-per-page {
+  margin: 0;
+  display: inline-block;
+  vertical-align: top;
+}
+
+#jobs-per-page {
+  width: 200px;
+  margin-left: 15px;
+}
+
+#pagination-wrapper {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: row-reverse;
+}
+
+.claim {
+  display: inline;
+}
+
+#job-name {
+  max-width: 500px; 
+  overflow-wrap: anywhere;
+}
+
+.rerun-button {
+  font-size: 20px;
+}
+
+.rerun-button:hover {
+  cursor: pointer;
+}
+
+.rerun-button.disabled {
+  pointer-events: none;
+  opacity: 0.65;
+  cursor: not-allowed;
 }
