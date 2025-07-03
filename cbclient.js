@@ -32,140 +32,76 @@ function getJenkins(jobUrl) {
 
 module.exports = function () {
 
-    var cluster = new couchbase.Cluster(config.Cluster,replicate_to=3);
-    cluster.authenticate(config.RBACUser, config.RBACKPassword);
-    var db = _db(config.DefaultBucket)
-    var buildsResponseCache = {}
-    var versionsResponseCache = {}
-    var bucketConnections = _bucketConnection()
+    const cluster = new couchbase.Cluster(config.Cluster, {
+        username: config.RBACUser,
+        password: config.RBACKPassword,
+        timeouts: { kvTimeout: 120 * 1000 }
+    });
+    const buildsResponseCache = {};
+    const versionsResponseCache = {};
+    const bucketConnections = _bucketConnection();
 
     function _bucketConnection() {
-        var buckets = {}
-        var rerun = _db('rerun')
-        // var server = _db('server')
-        // var sdk = _db('sdk')
-        // var mobile = _db('mobile')
-        // var builds = _db('builds')
-	var greenboard = _db('greenboard')
-	var triage_history = _db('triage_history')
-        // buckets['server'] = server
-        // buckets['sdk'] = sdk
-        // buckets['mobile'] = mobile
-        // buckets['builds'] = builds
-    buckets['greenboard'] = greenboard
-    buckets['rerun'] = rerun
-    buckets['triage_history'] = triage_history
-        return buckets
+        const buckets = {};
+        buckets['greenboard'] = _db('greenboard');
+        buckets['rerun'] = _db('rerun');
+        buckets['triage_history'] = _db('triage_history');
+        return buckets;
     }
 
     function _db(bucket) {
-        if (config.AuthPassword != "") {
-            //cluster.authenticate(bucket, config.AuthPassword);
-	    cluster.authenticate(config.RBACUser, config.AuthPassword);
-        }
-        var db = cluster.openBucket(bucket)
-        db.operationTimeout = 120 * 1000
-        return db
+        const bucketRef = cluster.bucket(bucket);
+        const collection = bucketRef.defaultCollection();
+        return { bucket: bucketRef, collection };
     }
 
     function strToQuery(queryStr) {
-        console.log(new Date(), "QUERY:", queryStr)
-        return couchbase.N1qlQuery.fromString(queryStr)
+        console.log(new Date(), "QUERY:", queryStr);
+        return queryStr;
     }
 
-    function _query(bucket, q) {
-        var db = bucketConnections["greenboard"]
-        if (!db.connected) {
-            db = _db(bucket);
-            bucketConnections[bucket] = db
+    async function _query(bucket, q) {
+        try {
+            const result = await cluster.query(q);
+            return result.rows;
+        } catch (err) {
+            throw err;
         }
-        var promise = new Promise(function (resolve, reject) {
-            db.query(q, function (err, components) {
-                if (!err) {
-                    resolve(components)
-                } else {
-                    reject(err)
-                }
-            })
-        })
-        return promise
     }
 
-    function _getmulti(bucket, docIds) {
-        var db = bucketConnections[bucket]
-        if (!db.connected){
-            db = _db(bucket);
-            bucketConnections[bucket] = db
+    async function _getmulti(bucket, docIds) {
+        const { collection } = bucketConnections[bucket];
+        const result = {};
+        for (const id of docIds) {
+            try {
+                const res = await collection.get(id);
+                result[id] = { value: res.content, cas: res.cas };
+            } catch (error) {
+                console.log(error);
+                throw error;
+            }
         }
-        return new Promise(function (resolve, reject) {
-            db.getMulti(docIds, function (error, result) {
-                if (error) {
-                    console.log(error)
-                    reject(error)
-                } else {
-                    resolve(result)
-                }
-            })
-        })
+        return result;
     }
 
-    function _upsert(bucket, key, doc, cas){
-        var db = bucketConnections["greenboard"];
-        if (!db.connected){
-            db = _db(bucket);
-            bucketConnections[bucket] = db
-        }
-        var options = {}
+    async function _upsert(bucket, key, doc, cas){
+        const { collection } = bucketConnections[bucket];
+        const options = {};
         if (cas) {
-            options.cas = cas
+            options.cas = cas;
         }
-        return new Promise(function (resolve, reject) {
-            db.upsert(key,doc,options, function (error, result) {
-                if (error) {
-                    console.log(error)
-                    reject(error);
-                } else {
-                    console.log(result)
-                    resolve(result);
-                }
-            })
-        });
+        return collection.upsert(key, doc, options);
       }
     
-    function _get(bucket, documentId) {
-        var db = bucketConnections[bucket];
-        if (!db.connected){
-            db = _db(bucket);
-            bucketConnections[bucket] = db
-        }
-        return new Promise(function (resolve, reject) {
-            db.get(documentId, function (error, result) {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve(result);
-                }
-            })
-        });
+    async function _get(bucket, documentId) {
+        const { collection } = bucketConnections[bucket];
+        const res = await collection.get(documentId);
+        return { value: res.content, cas: res.cas };
     }
 
-    function doUpsert(bucket, key, doc) {
-        var db = bucketConnections[bucket]
-        if (!db.connected){
-            db = _db(bucket);
-            bucketConnections[bucket] = db
-        }
-        var promise = new Promise(function (resolve, reject) {
-            db.upsert(key, doc, function (err, result) {
-                if (err) {
-                    reject({err: err})
-                }
-                else {
-                    resolve(result)
-                }
-            })
-        })
-        return promise
+    async function doUpsert(bucket, key, doc) {
+        const { collection } = bucketConnections[bucket];
+        return collection.upsert(key, doc);
     }
 
     var API = {
@@ -253,12 +189,9 @@ module.exports = function () {
             // }
         },
         getBuildInfo: function (bucket, build, fun) {
-            var db = bucketConnections["greenboard"]
-            if (!db.connected){
-                db = _db(bucket);c
-                bucketConnections[bucket] = db
-            }
-            db.get(build, fun)
+            _get('greenboard', build)
+                .then(res => fun(null, res))
+                .catch(err => fun(err));
         },
         jobsForBuild: function (bucket, build) {
             function getJobs() {
